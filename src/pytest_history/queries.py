@@ -9,7 +9,7 @@ from pytest_history.model import TestResult, TestRun
 def flakes(db):
     query = cleandoc(
         """
-        SELECT 
+        SELECT
             NULL as id,
             NULL as test_run,
             t1.node_id,
@@ -18,7 +18,7 @@ def flakes(db):
             t1.testcase,
             NULL as outcome,
             NULL as skipped,
-            t1.duration 
+            t1.duration
         FROM "test.results" t1
         JOIN "test.results" t2 on t1.testcase = t2.testcase AND (t1.test_run <>  t2.test_run)
         WHERE (t1.outcome = 'passed' AND t2.outcome = 'failed')
@@ -33,7 +33,7 @@ def flakes(db):
 
 
 def runs(db):
-    query = 'SELECT id, start FROM "test.runs";'
+    query = 'SELECT id, start, githash FROM "test.runs";'
     with sqlite3.connect(db) as con:
         runs = con.execute(query)
         yield from (TestRun(*run) for run in runs)
@@ -42,16 +42,17 @@ def runs(db):
 def results(db, id):
     query = cleandoc(
         """
-        SELECT 
+        SELECT
             id,
             test_run,
+            githash,
             node_id,
             file,
             lineno,
             testcase,
             outcome,
             skipped,
-            duration 
+            duration
         FROM "test.results"
         WHERE test_run = ?
         ORDER BY testcase;
@@ -67,6 +68,7 @@ def newly_added(db):
         """
         SELECT id,
         test_run,
+        githash,
         node_id,
         file,
         lineno,
@@ -92,6 +94,7 @@ def added_since(db, since):
         """
         SELECT id,
         test_run,
+        githash,
         node_id,
         file,
         lineno,

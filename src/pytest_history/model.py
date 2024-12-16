@@ -21,3 +21,4 @@ class TestResult:
 class TestRun:
     id: int
     start: datetime.datetime
+    githash: str

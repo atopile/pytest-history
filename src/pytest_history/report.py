@@ -6,14 +6,15 @@ from pathlib import Path
 
 
 class SqlLite:
-    def __init__(self, db, test_run):
+    def __init__(self, db, test_run, githash):
         def ensure_test_runs_table_exists(name):
             with sqlite3.connect(name) as con:
                 query = cleandoc(
                     """
                     CREATE TABLE IF NOT EXISTS [test.runs] (
                         id integer primary key,
-                        start text
+                        start text,
+                        githash text
                     );
                     """
                 )
@@ -39,16 +40,16 @@ class SqlLite:
                 )
                 con.execute(query)
 
-        def add_test_run_entry(name, run):
+        def add_test_run_entry(name, run, githash):
             with sqlite3.connect(name) as con:
-                query = "INSERT INTO [test.runs] (start) VALUES (?);"
-                result = con.execute(query, (run,))
+                query = "INSERT INTO [test.runs] (start, githash) VALUES (?, ?);"
+                result = con.execute(query, (run, githash))
                 return result.lastrowid
 
         self._db = db
         ensure_test_runs_table_exists(db)
         ensure_test_results_table_exists(db)
-        self._test_run = add_test_run_entry(db, test_run)
+        self._test_run = add_test_run_entry(db, test_run, githash)
 
     def pytest_runtest_logreport(self, report):
         if report.when != "teardown":

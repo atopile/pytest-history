@@ -73,9 +73,9 @@ class History:
         @staticmethod
         def print_runs(db, _args):
             # TODO: consider adding passed, failed, skipped
-            template = "{id} {datetime}"
+            template = "{id} {githash} {datetime}"
             for r in runs(db):
-                print(template.format(id=r.id, datetime=r.start))
+                print(template.format(id=r.id, githash=r.githash, datetime=r.start))
             return ExitCode.Success
 
         @staticmethod

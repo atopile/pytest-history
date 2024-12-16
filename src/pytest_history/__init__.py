@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 from datetime import datetime
 from pathlib import Path
+import subprocess
 
 import pytest
 
@@ -33,6 +34,14 @@ def pytest_configure(config: pytest.Config):
     if not db_file.exists():
         report.SqlLite.create_db(db_file.name)
 
-    test_reporter = report.SqlLite(db_file, f"{datetime.now()}")
+    def get_githash() -> str:
+        try:
+            return subprocess.check_output(["git", "rev-parse", "HEAD"]).decode(
+                "utf-8"
+            ).strip()
+        except Exception:
+            return "<unknown>"
+
+    test_reporter = report.SqlLite(db_file, f"{datetime.now()}", get_githash())
     config.stash["sql-reporter"] = test_reporter
     config.pluginmanager.register(test_reporter)
