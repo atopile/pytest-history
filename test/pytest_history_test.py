@@ -4,6 +4,7 @@ import sqlite3
 from inspect import cleandoc
 
 from pytest import Pytester
+
 from pytest_history import DEFAULT_DB
 
 pytest_plugins = "pytester"
@@ -13,7 +14,7 @@ def test_plugin_creates_default_database(pytester: Pytester):
     test = cleandoc(
         f"""
         from pathlib import Path
-         
+
         def test_pass():
             db = Path("{DEFAULT_DB}")
             assert db.exists()
