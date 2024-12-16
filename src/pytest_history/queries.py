@@ -20,9 +20,9 @@ def flakes(db):
             NULL as skipped,
             t1.duration
         FROM "test.results" t1
-        JOIN "test.results" t2 on t1.testcase = t2.testcase AND (t1.test_run <>  t2.test_run)
+        JOIN "test.results" t2 on t1.testcase = t2.testcase AND (t1.test_run <> t2.test_run)
         WHERE (t1.outcome = 'passed' AND t2.outcome = 'failed')
-           OR (t1.outcome = 'failed' AND t2.outcome = 'passed')
+            OR (t1.outcome = 'failed' AND t2.outcome = 'passed')
         GROUP BY t1.testcase
         ORDER BY t1.testcase;
         """
