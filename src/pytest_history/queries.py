@@ -45,7 +45,6 @@ def results(db, id):
         SELECT
             id,
             test_run,
-            githash,
             node_id,
             file,
             lineno,
@@ -68,7 +67,6 @@ def newly_added(db):
         """
         SELECT id,
         test_run,
-        githash,
         node_id,
         file,
         lineno,
@@ -94,7 +92,6 @@ def added_since(db, since):
         """
         SELECT id,
         test_run,
-        githash,
         node_id,
         file,
         lineno,

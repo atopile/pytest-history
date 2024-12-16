@@ -25,23 +25,25 @@ def pytest_addoption(parser: pytest.Parser):
     )
 
 
+def get_githash() -> str:
+    try:
+        return subprocess.check_output(["git", "rev-parse", "HEAD"]).decode(
+            "utf-8"
+        ).strip()
+    except Exception:
+        return "<unknown>"
+
+
 def pytest_configure(config: pytest.Config):
     db_file = config.getini("history-db")
     db_file = os.environ.get("PYTEST_HISTORY_DB", db_file)
     db_file = config.option.history_db if config.option.history_db else db_file
     db_file = Path(db_file)
 
-    if not db_file.exists():
-        report.SqlLite.create_db(db_file.name)
+    if not hasattr(config, "workerinput"):
+        if not db_file.exists():
+            report.SqlLite.create_db(db_file.name)
 
-    def get_githash() -> str:
-        try:
-            return subprocess.check_output(["git", "rev-parse", "HEAD"]).decode(
-                "utf-8"
-            ).strip()
-        except Exception:
-            return "<unknown>"
-
-    test_reporter = report.SqlLite(db_file, f"{datetime.now()}", get_githash())
-    config.stash["sql-reporter"] = test_reporter
-    config.pluginmanager.register(test_reporter)
+        test_reporter = report.SqlLite(db_file, f"{datetime.now()}", get_githash())
+        config.stash["sql-reporter"] = test_reporter
+        config.pluginmanager.register(test_reporter)
