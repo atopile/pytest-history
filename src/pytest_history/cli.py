@@ -5,8 +5,9 @@ from enum import IntEnum
 from pathlib import Path
 from typing import Optional
 
+import rich
 import typer
-from rich import print
+from rich.table import Table
 
 from pytest_history.queries import flakes, newly_added, results, runs
 
@@ -17,14 +18,17 @@ app = typer.Typer(
 list_app = typer.Typer(help="List historic data", no_args_is_help=True)
 app.add_typer(list_app, name="list")
 
+
 class ExitCode(IntEnum):
     Success = 0
     Failure = 1
+
 
 def validate_db(db: Path) -> Path:
     if not db.exists():
         raise typer.BadParameter(f"Database: {db}, does not exist")
     return db
+
 
 @app.command("flakes")
 def print_flakes(
@@ -37,13 +41,16 @@ def print_flakes(
     """List all flaky tests"""
     exit_code = ExitCode.Success
     for f in flakes(db):
-        print(f"{f.node_id}")
+        rich.print(f"{f.node_id}")
         exit_code = ExitCode.Failure
     return exit_code
 
+
 @list_app.command("results")
 def print_results(
-    id: int = typer.Argument(..., help="Id of the test run whose result shall be reported"),
+    id: int = typer.Argument(
+        ..., help="Id of the test run whose result shall be reported"
+    ),
     db: Path = typer.Option(
         ".test-results.db",
         help="Database used for analysing the data",
@@ -51,17 +58,23 @@ def print_results(
     ),
 ) -> ExitCode:
     """List historic test results"""
-    template = "{id} {node_id} {duration} {outcome}"
+    table = Table(title=f"Test Results for Run {id}")
+    table.add_column("ID")
+    table.add_column("Test")
+    table.add_column("Duration")
+    table.add_column("Outcome")
+
     for r in results(db, id):
-        print(
-            template.format(
-                id=r.id,
-                node_id=r.node_id,
-                duration=r.duration,
-                outcome=r.outcome,
-            )
+        table.add_row(
+            str(r.id),
+            r.node_id,
+            str(r.duration),
+            r.outcome,
         )
+
+    rich.print(table)
     return ExitCode.Success
+
 
 @list_app.command("runs")
 def print_runs(
@@ -72,10 +85,17 @@ def print_runs(
     ),
 ) -> ExitCode:
     """List historic test runs"""
-    template = "{id} {githash} {datetime}"
+    table = Table(title="Test Runs")
+    table.add_column("ID")
+    table.add_column("Git Hash")
+    table.add_column("Date/Time")
+
     for r in runs(db):
-        print(template.format(id=r.id, githash=r.githash, datetime=r.start))
+        table.add_row(str(r.id), r.githash, str(r.start))
+
+    rich.print(table)
     return ExitCode.Success
+
 
 @list_app.command("added")
 def print_newly_added(
@@ -86,17 +106,23 @@ def print_newly_added(
     ),
 ) -> ExitCode:
     """List test added during the most recent run"""
-    template = "{id} {node_id} {duration} {outcome}"
+    table = Table(title="Newly Added Tests")
+    table.add_column("ID")
+    table.add_column("Test")
+    table.add_column("Duration")
+    table.add_column("Outcome")
+
     for n in newly_added(db):
-        print(
-            template.format(
-                id=n.id,
-                node_id=n.node_id,
-                duration=n.duration,
-                outcome=n.outcome,
-            )
+        table.add_row(
+            str(n.id),
+            n.node_id,
+            str(n.duration),
+            n.outcome,
         )
+
+    rich.print(table)
     return ExitCode.Success
+
 
 def main(argv: Optional[list[str]] = None) -> None:
     try:
@@ -104,8 +130,9 @@ def main(argv: Optional[list[str]] = None) -> None:
             sys.argv[1:] = argv
         app()
     except Exception as ex:
-        print(f"Error occurred, details: {ex}")
+        rich.print(f"Error occurred, details: {ex}")
         sys.exit(ExitCode.Failure)
+
 
 if __name__ == "__main__":
     main()
