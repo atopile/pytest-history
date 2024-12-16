@@ -8,6 +8,7 @@ from typing import Optional
 import rich
 import typer
 from rich.table import Table
+from rich.text import Text
 
 from pytest_history.queries import flakes, newly_added, results, runs
 
@@ -28,6 +29,23 @@ def validate_db(db: Path) -> Path:
     if not db.exists():
         raise typer.BadParameter(f"Database: {db}, does not exist")
     return db
+
+
+OUTCOME_COLORS = {
+    "passed": "green",
+    "failed": "red",
+}
+
+
+def _outcome(outcome: str) -> Text:
+    return Text(outcome, OUTCOME_COLORS.get(outcome, "white"))
+
+
+def _limit_len(text: str, max_len: int = 30) -> str:
+    if len(text) > max_len:
+        half = (max_len - 3) // 2
+        return text[:half] + "..." + text[-half:]
+    return text
 
 
 @app.command("flakes")
@@ -67,9 +85,9 @@ def print_results(
     for r in results(db, id):
         table.add_row(
             str(r.id),
-            r.node_id,
-            str(r.duration),
-            r.outcome,
+            _limit_len(r.node_id.split("::")[-1]),
+            f"{r.duration:.3f}",
+            _outcome(r.outcome),
         )
 
     rich.print(table)
@@ -115,9 +133,9 @@ def print_newly_added(
     for n in newly_added(db):
         table.add_row(
             str(n.id),
-            n.node_id,
-            str(n.duration),
-            n.outcome,
+            _limit_len(n.node_id.split("::")[-1]),
+            f"{n.duration:.3f}",
+            _outcome(n.outcome),
         )
 
     rich.print(table)
