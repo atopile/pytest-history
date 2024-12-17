@@ -1,9 +1,4 @@
-from __future__ import annotations
-
 import os
-from datetime import datetime
-from pathlib import Path
-import subprocess
 
 import pytest
 
@@ -14,36 +9,42 @@ DEFAULT_DB = ".test-results.db"
 
 def pytest_addoption(parser: pytest.Parser):
     history = parser.getgroup("history")
+    history.addoption("--history-email", help="Email to use for history reporting")
     history.addoption(
-        "--history-db", help=f"Sqlite db to write the data to [default: {DEFAULT_DB}]"
+        "--history-password", help="Password to use for history reporting"
     )
     parser.addini(
-        "history-db",
-        f"Sqlite db to write the data to. [default: {DEFAULT_DB}]",
+        "history-email",
+        "Email to use for history reporting",
         type="string",
-        default=DEFAULT_DB,
+        default=None,
     )
-
-
-def get_githash() -> str:
-    try:
-        return subprocess.check_output(["git", "rev-parse", "HEAD"]).decode(
-            "utf-8"
-        ).strip()
-    except Exception:
-        return "<unknown>"
+    # Password not in ini because it's insecure
 
 
 def pytest_configure(config: pytest.Config):
-    db_file = config.getini("history-db")
-    db_file = os.environ.get("PYTEST_HISTORY_DB", db_file)
-    db_file = config.option.history_db if config.option.history_db else db_file
-    db_file = Path(db_file)
-
     if not hasattr(config, "workerinput"):
-        if not db_file.exists():
-            report.SqlLite.create_db(db_file.name)
+        email = config.option.history_email or os.environ.get(
+            "PYTEST_HISTORY_EMAIL", config.getini("history-email")
+        )
+        password = config.option.history_password or os.environ.get(
+            "PYTEST_HISTORY_PASSWORD"
+        )
+        if not email or not password:
+            print("No email or password provided to login to db, skipping history reporting")
+            return
 
-        test_reporter = report.SqlLite(db_file, f"{datetime.now()}", get_githash())
+        try:
+            test_reporter = report.Supabase(email, password)
+        except Exception as e:
+            print(f"Error configuring pytest-history: {repr(e)}")
+            return
+
         config.stash["sql-reporter"] = test_reporter
         config.pluginmanager.register(test_reporter)
+
+
+def pytest_unconfigure(config: pytest.Config):
+    if hasattr(config, "workerinput"):
+        if reporter := config.stash.get("sql-reporter"):
+            del reporter

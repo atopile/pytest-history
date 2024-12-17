@@ -1,94 +1,70 @@
-from __future__ import annotations
+from datetime import datetime
+import os
+import subprocess
+from typing import Protocol
 
-import sqlite3
-from inspect import cleandoc
-from pathlib import Path
+from supabase import create_client
+import supabase
+
+PUBLIC_SUPABASE_URL = "https://ynesgbuoxmszjrkzazxz.supabase.co"
+PUBLIC_SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InluZXNnYnVveG1zempya3phenh6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzQzNzg5NDYsImV4cCI6MjA0OTk1NDk0Nn0.6KxEoSHTgyV4jKnnLAG5-Y9tWfHOzpl0qnA_NPzGUBo"
 
 
-class SqlLite:
-    def __init__(self, db, test_run, githash):
-        def ensure_test_runs_table_exists(name):
-            with sqlite3.connect(name) as con:
-                query = cleandoc(
-                    """
-                    CREATE TABLE IF NOT EXISTS [test.runs] (
-                        id integer primary key,
-                        start text,
-                        githash text
-                    );
-                    """
-                )
-                con.execute(query)
 
-        def ensure_test_results_table_exists(name):
-            with sqlite3.connect(name) as con:
-                query = cleandoc(
-                    """
-                    CREATE TABLE IF NOT EXISTS [test.results] (
-                        id integer primary key,
-                        test_run integer not null,
-                        node_id text,
-                        file text,
-                        lineno integer,
-                        testcase text,
-                        outcome text,
-                        skipped text,
-                        duration real,
-                        foreign key (test_run) REFERENCES [test.runs](id)
-                    );
-                    """
-                )
-                con.execute(query)
+class Test(Protocol):
+    nodeid: str
+    outcome: str
+    duration: float
+    location: tuple[str, int, str]
 
-        def add_test_run_entry(name, run, githash):
-            with sqlite3.connect(name) as con:
-                query = "INSERT INTO [test.runs] (start, githash) VALUES (?, ?);"
-                result = con.execute(query, (run, githash))
-                return result.lastrowid
 
-        self._db = db
-        ensure_test_runs_table_exists(db)
-        ensure_test_results_table_exists(db)
-        self._test_run = add_test_run_entry(db, test_run, githash)
+def _get_githash() -> str:
+    try:
+        return (
+            subprocess.check_output(["git", "rev-parse", "HEAD"])
+            .decode("utf-8")
+            .strip()
+        )
+    except Exception:
+        return "<unknown>"
+
+
+class Supabase:
+    def __init__(self, email: str, password: str):
+        self.supabase = create_client(PUBLIC_SUPABASE_URL, PUBLIC_SUPABASE_KEY)
+        self.supabase.auth.sign_in_with_password(
+            {
+                "email": email,
+                "password": password,
+            }
+        )
+        response = self.supabase.table("test.runs").insert(
+            {
+                "start": f"{datetime.now()}",
+                "githash": _get_githash(),
+            }
+        ).execute()
+
+        self._test_run = response.data[0]["id"]
 
     def pytest_runtest_logreport(self, report):
         if report.when != "teardown":
             return
         self.report(report)
 
-    def report(self, test):
-        with sqlite3.connect(self._db) as con:
-            query = cleandoc(
-                """
-                INSERT INTO [test.results] (
-                    test_run,
-                    node_id,
-                    file,
-                    lineno,
-                    testcase,
-                    outcome,
-                    duration
-                )
-                VALUES (?, ?, ?, ?, ?, ?, ? );
-                """
-            )
-            file, lineno, testcase = test.location
-            con.execute(
-                query,
-                (
-                    self._test_run,
-                    test.nodeid,
-                    file,
-                    lineno,
-                    testcase,
-                    test.outcome,
-                    test.duration,
-                ),
-            )
+    def report(self, test: Test):
+        file, lineno, testcase = test.location
+        self.supabase.table("test.results").insert(
+            {
+                "test_run": self._test_run,
+                "node_id": test.nodeid,
+                "file": file,
+                "lineno": lineno,
+                "testcase": testcase,
+                "outcome": test.outcome,
+                "duration": test.duration,
+            }
+        ).execute()
 
-    @staticmethod
-    def create_db(name: str | Path) -> str | Path:
-        with sqlite3.connect(name) as _:
-            # we only want to create a empty db file
-            pass
-        return name
+    def __del__(self):
+        self.supabase.auth.sign_out()
