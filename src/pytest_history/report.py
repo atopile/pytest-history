@@ -1,10 +1,9 @@
-from datetime import datetime
-import os
 import subprocess
+from datetime import datetime
 from typing import Protocol
 
 from supabase import create_client
-import supabase
+from supabase.client import ClientOptions
 
 PUBLIC_SUPABASE_URL = "https://ynesgbuoxmszjrkzazxz.supabase.co"
 PUBLIC_SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InluZXNnYnVveG1zempya3phenh6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzQzNzg5NDYsImV4cCI6MjA0OTk1NDk0Nn0.6KxEoSHTgyV4jKnnLAG5-Y9tWfHOzpl0qnA_NPzGUBo"
@@ -31,7 +30,7 @@ def _get_githash() -> str:
 
 class Supabase:
     def __init__(self, email: str, password: str):
-        self.supabase = create_client(PUBLIC_SUPABASE_URL, PUBLIC_SUPABASE_KEY)
+        self.supabase = create_client(PUBLIC_SUPABASE_URL, PUBLIC_SUPABASE_KEY, options=ClientOptions(auto_refresh_token=False))
         self.supabase.auth.sign_in_with_password(
             {
                 "email": email,
@@ -65,6 +64,3 @@ class Supabase:
                 "duration": test.duration,
             }
         ).execute()
-
-    def teardown(self):
-        self.supabase.auth.sign_out()

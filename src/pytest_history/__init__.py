@@ -42,9 +42,3 @@ def pytest_configure(config: pytest.Config):
 
         config.stash["sql-reporter"] = test_reporter
         config.pluginmanager.register(test_reporter)
-
-
-def pytest_unconfigure(config: pytest.Config):
-    if not hasattr(config, "workerinput"):
-        if reporter := config.stash.get("sql-reporter", None):
-            reporter.teardown()
