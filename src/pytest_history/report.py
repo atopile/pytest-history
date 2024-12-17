@@ -1,13 +1,13 @@
 import subprocess
 from datetime import datetime
-from typing import Protocol
+from typing import TYPE_CHECKING, Optional, Protocol
 
+import pytest
 from supabase import create_client
-from supabase.client import ClientOptions
+from supabase.client import Client, ClientOptions
 
-PUBLIC_SUPABASE_URL = "https://ynesgbuoxmszjrkzazxz.supabase.co"
-PUBLIC_SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InluZXNnYnVveG1zempya3phenh6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzQzNzg5NDYsImV4cCI6MjA0OTk1NDk0Nn0.6KxEoSHTgyV4jKnnLAG5-Y9tWfHOzpl0qnA_NPzGUBo"
-
+if TYPE_CHECKING:
+    from _pytest.terminal import TerminalReporter
 
 
 class Test(Protocol):
@@ -28,30 +28,55 @@ def _get_githash() -> str | None:
         return None
 
 
-class Supabase:
-    def __init__(self, email: str, password: str):
-        self.supabase = create_client(PUBLIC_SUPABASE_URL, PUBLIC_SUPABASE_KEY, options=ClientOptions(auto_refresh_token=False))
+class SupabaseReporter:
+    def __init__(self, email: str, password: str, supabase_url: str, supabase_key: str):
+        self.supabase: Client = create_client(
+            supabase_url,
+            supabase_key,
+            options=ClientOptions(auto_refresh_token=False),
+        )
         self.supabase.auth.sign_in_with_password(
             {
                 "email": email,
                 "password": password,
             }
         )
-        response = self.supabase.table("test_runs").insert(
-            {
-                "start": f"{datetime.now()}",
-                "githash": _get_githash(),
-            }
-        ).execute()
+        self._test_run: Optional[int] = None
+        self._report_count: int = 0
 
+    def pytest_configure(self, config) -> None:
+        """Configure the plugin"""
+        response = (
+            self.supabase.table("test_runs")
+            .insert(
+                {
+                    "start": f"{datetime.now()}",
+                    "githash": _get_githash(),
+                }
+            )
+            .execute()
+        )
         self._test_run = response.data[0]["id"]
 
-    def pytest_runtest_logreport(self, report):
-        if report.when != "teardown":
+    def pytest_runtest_logreport(self, report) -> None:
+        """Process a test report"""
+        if report.when != "call":  # Only process the actual test call
             return
-        self.report(report)
 
-    def report(self, test: Test):
+        try:
+            self.report(report)
+        except Exception as e:
+            print(f"Error reporting {report.nodeid}: {e}")
+
+    def report(self, test: Test) -> None:
+        """Report a test result to Supabase.
+
+        Args:
+            test: The test result to report
+        """
+        if self._test_run is None:
+            return
+
         file, lineno, testcase = test.location
         self.supabase.table("test_results").insert(
             {
@@ -64,3 +89,12 @@ class Supabase:
                 "duration": test.duration,
             }
         ).execute()
+        self._report_count += 1
+
+    @pytest.hookimpl(trylast=True)
+    def pytest_sessionfinish(self, session):
+        print(f"Reported {self._report_count} tests")
+        # TODO: execute the request here
+
+    def pytest_terminal_summary(self, terminalreporter: "TerminalReporter"):
+        terminalreporter.write_line(f"Recorded {self._report_count} tests for posterity")
