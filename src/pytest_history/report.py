@@ -66,5 +66,5 @@ class Supabase:
             }
         ).execute()
 
-    def __del__(self):
+    def teardown(self):
         self.supabase.auth.sign_out()

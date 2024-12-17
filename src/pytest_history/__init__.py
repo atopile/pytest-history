@@ -45,6 +45,6 @@ def pytest_configure(config: pytest.Config):
 
 
 def pytest_unconfigure(config: pytest.Config):
-    if hasattr(config, "workerinput"):
-        if reporter := config.stash.get("sql-reporter"):
-            del reporter
+    if not hasattr(config, "workerinput"):
+        if reporter := config.stash.get("sql-reporter", None):
+            reporter.teardown()
