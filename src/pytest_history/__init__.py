@@ -1,10 +1,9 @@
 import os
 
+import dotenv
 import pytest
 
 from pytest_history import report
-
-DEFAULT_DB = ".test-results.db"
 
 
 def pytest_addoption(parser: pytest.Parser):
@@ -24,12 +23,15 @@ def pytest_addoption(parser: pytest.Parser):
 
 def pytest_configure(config: pytest.Config):
     if not hasattr(config, "workerinput"):
+        dotenv.load_dotenv()
+
         email = config.option.history_email or os.environ.get(
             "PYTEST_HISTORY_EMAIL", config.getini("history-email")
         )
         password = config.option.history_password or os.environ.get(
             "PYTEST_HISTORY_PASSWORD"
         )
+
         if not email or not password:
             print("No email or password provided to login to db, skipping history reporting")
             return

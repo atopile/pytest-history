@@ -17,15 +17,15 @@ class Test(Protocol):
     location: tuple[str, int, str]
 
 
-def _get_githash() -> str:
+def _get_githash() -> str | None:
     try:
         return (
             subprocess.check_output(["git", "rev-parse", "HEAD"])
             .decode("utf-8")
             .strip()
         )
-    except Exception:
-        return "<unknown>"
+    except subprocess.CalledProcessError:
+        return None
 
 
 class Supabase:
@@ -37,7 +37,7 @@ class Supabase:
                 "password": password,
             }
         )
-        response = self.supabase.table("test.runs").insert(
+        response = self.supabase.table("test_runs").insert(
             {
                 "start": f"{datetime.now()}",
                 "githash": _get_githash(),
@@ -53,10 +53,10 @@ class Supabase:
 
     def report(self, test: Test):
         file, lineno, testcase = test.location
-        self.supabase.table("test.results").insert(
+        self.supabase.table("test_results").insert(
             {
-                "test_run": self._test_run,
-                "node_id": test.nodeid,
+                "test_runs_id": self._test_run,
+                "nodeid": test.nodeid,
                 "file": file,
                 "lineno": lineno,
                 "testcase": testcase,
