@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <title>Filtered Regression History</title>
+  <!-- Add Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    // Configure Tailwind with custom colors for test states
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            'test-pass': '#4CAF50',
+            'test-fail': '#F44336',
+            'test-skip': '#FF9800',
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    /* Add this to handle text truncation */
+    .test-name {
+      max-width: 300px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      direction: rtl;  /* This makes the truncation happen at the start */
+      text-align: left;
+    }
+  </style>
+</head>
+<body class="bg-gray-50">
+  <div class="w-full px-2 py-4">
+    <h1 class="text-2xl font-bold mb-4">Test History (Filtered for <code class="bg-gray-100 px-2 py-1 rounded">test/test_regressions.py</code>)</h1>
+    
+    <div class="relative overflow-x-auto shadow-md rounded-lg">
+      <table id="history-table" class="w-full text-sm text-left">
+        <thead>
+          <tr class="bg-gray-100">
+            <th class="sticky left-0 bg-gray-100 px-3 py-3 font-semibold w-[300px]">Test Node</th>
+            <!-- Run-date columns appended by JS -->
+          </tr>
+        </thead>
+        <tbody>
+          <!-- Rows appended by JS -->
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <script type="module">
+    import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
+
+    const SUPABASE_URL = 'https://ynesgbuoxmszjrkzazxz.supabase.co';
+    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InluZXNnYnVveG1zempya3phenh6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzQzNzg5NDYsImV4cCI6MjA0OTk1NDk0Nn0.6KxEoSHTgyV4jKnnLAG5-Y9tWfHOzpl0qnA_NPzGUBo';
+    const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    const MAX_RUNS = 100000;
+    const REFRESH_INTERVAL = 5 * 60 * 1000;  // Refresh every 5 minutes
+
+    async function refreshTable() {
+      // Clear existing table content
+      document.querySelector('#history-table thead tr').innerHTML = `
+        <th class="sticky left-0 bg-gray-100 px-3 py-3 font-semibold w-[300px]">Test Node</th>
+      `;
+      document.querySelector('#history-table tbody').innerHTML = '';
+      
+      // Rebuild the table
+      await buildHistoryTable();
+      
+      // Schedule next refresh
+      setTimeout(refreshTable, REFRESH_INTERVAL);
+    }
+
+    // Update the status mapping and classes
+    const statusClasses = {
+      'passed': 'bg-test-pass text-white font-medium',
+      'failed': 'bg-test-fail text-white font-medium',
+      'skipped': 'bg-test-skip text-white font-medium',
+      'N/A': 'bg-test-skip text-white font-medium'
+    };
+
+    function sortTable(columnIndex) {
+      const tbody = document.querySelector('#history-table tbody');
+      const rows = Array.from(tbody.querySelectorAll('tr'));
+      
+      // Get current sort direction from the header
+      const th = document.querySelector(`#history-table th:nth-child(${columnIndex + 1})`);
+      const ascending = th.dataset.sortDir !== 'asc';
+      
+      // Update sort direction indicators on all headers
+      document.querySelectorAll('#history-table th').forEach(header => {
+        header.dataset.sortDir = '';
+        header.classList.remove('after:content-["↑"]', 'after:content-["↓"]', 'after:ml-2');
+      });
+      
+      // Update current header's sort direction
+      th.dataset.sortDir = ascending ? 'asc' : 'desc';
+      th.classList.add(
+        ascending ? 'after:content-["↑"]' : 'after:content-["↓"]',
+        'after:ml-2'
+      );
+
+      // Sort the rows
+      rows.sort((rowA, rowB) => {
+        const cellA = rowA.cells[columnIndex].textContent;
+        const cellB = rowB.cells[columnIndex].textContent;
+        
+        if (columnIndex === 0) {
+          // Sort test names alphabetically
+          return ascending ? 
+            cellA.localeCompare(cellB) : 
+            cellB.localeCompare(cellA);
+        } else {
+          // Sort test results (PASS > FAIL > SKIP > N/A)
+          const resultOrder = { 'PASS': 0, 'FAIL': 1, 'SKIP': 2, 'N/A': 3 };
+          const valueA = resultOrder[cellA] ?? 4;
+          const valueB = resultOrder[cellB] ?? 4;
+          return ascending ? valueA - valueB : valueB - valueA;
+        }
+      });
+
+      // Reinsert rows in sorted order
+      rows.forEach(row => tbody.appendChild(row));
+    }
+
+    async function buildHistoryTable() {
+      // 1. Fetch the most recent runs first
+      let { data: allRuns, error: runsError } = await supabase
+        .from('test_runs')
+        .select('id, start, githash')
+        .order('start', { ascending: false })
+        .limit(MAX_RUNS);
+      if (runsError) {
+        console.error('Error fetching test_runs:', runsError);
+        return;
+      }
+
+      // 2. Fetch test results for these specific runs
+      let { data: regressionResults, error: resultsError } = await supabase
+        .from('test_results')
+        .select('*')
+        .eq('file', 'test/test_regressions.py')
+        .in('test_runs_id', allRuns.map(run => run.id))
+        .order('test_runs_id', { ascending: false });
+      if (resultsError) {
+        console.error('Error fetching test_results:', resultsError);
+        return;
+      }
+
+      let runs = allRuns;  // Use all runs without filtering
+
+      // Filter out runs where all tests were skipped
+      runs = runs.filter(run => {
+        const runResults = regressionResults.filter(r => r.test_runs_id === run.id);
+        console.log(`Run ${run.id} (${new Date(run.start).toISOString()}) has ${runResults.length} results`);
+        const hasNonSkip = runResults.some(result => result.outcome === 'passed' || result.outcome === 'failed');
+        if (!hasNonSkip) {
+          console.log(`Filtering out run ${run.id} as all results were skipped`);
+        }
+        return hasNonSkip;
+      });
+
+      // Possibly limit to the last MAX_RUNS columns
+      if (runs.length > MAX_RUNS) {
+        runs = runs.slice(runs.length - MAX_RUNS);
+      }
+
+      // 3. Build a map: (nodeid, runID) -> outcome, plus gather node IDs
+      const outcomeMap = {};
+      const nodeSet = new Set();
+      regressionResults.forEach(r => {
+        // Strip the env suffix for grouping
+        const baseNodeId = r.nodeid
+          .replace(/-env\d+([^\]]*)$/, '$1')           // Remove -envX at the end
+          .replace(/\[([^\]]+)-env\d+([^\]]*)\]/, '[$1$2]')  // Remove -envX inside brackets
+          .replace(/-env\d+(?=-)/, '');                // Remove -envX in the middle
+        nodeSet.add(baseNodeId);
+        
+        // Combine results, prioritizing PASS/FAIL over SKIP
+        const key = `${baseNodeId}-${r.test_runs_id}`;
+        const existingOutcome = outcomeMap[key];
+        if (!existingOutcome || 
+            (existingOutcome === 'skipped' && (r.outcome === 'passed' || r.outcome === 'failed'))) {
+          outcomeMap[key] = r.outcome;
+        }
+      });
+
+      // Build table headers for each run
+      const theadRow = document.querySelector('#history-table thead tr');
+      runs.forEach((run, index) => {
+        const th = document.createElement('th');
+        th.className = 'px-6 py-3 font-semibold cursor-pointer hover:bg-gray-200 transition-colors';
+        
+        // Add git hash (last 7 chars) above date/time
+        const shortHash = run.githash ? run.githash.slice(-7) : 'unknown';
+        th.textContent = `${shortHash}\n${new Date(run.start).toLocaleDateString()}\n${new Date(run.start).toLocaleTimeString([], { 
+          hour: '2-digit', 
+          minute: '2-digit',
+          hour12: false
+        })}`;
+        th.style.whiteSpace = 'pre';
+        
+        th.addEventListener('click', () => sortTable(index + 1));
+        theadRow.appendChild(th);
+      });
+
+      // Add click handler to the Test Node column header
+      const firstTh = theadRow.querySelector('th');
+      firstTh.className += ' cursor-pointer hover:bg-gray-200 transition-colors';
+      firstTh.addEventListener('click', () => sortTable(0));
+
+      // 4. For each node ID, build a row for these runs
+      const tbody = document.querySelector('#history-table tbody');
+      const allNodeIds = Array.from(nodeSet).sort();
+      allNodeIds.forEach(nodeid => {
+        const tr = document.createElement('tr');
+        tr.className = 'border-b hover:bg-gray-50';
+
+        const testCell = document.createElement('td');
+        testCell.className = 'sticky left-0 bg-white px-3 py-4 whitespace-nowrap test-name';
+        const shortNodeId = nodeid.split('::').pop();  // nodeid is already stripped of env suffix
+        testCell.textContent = shortNodeId;
+        tr.appendChild(testCell);
+
+        runs.forEach(run => {
+          const td = document.createElement('td');
+          td.className = 'px-3 py-4 text-center';
+          const outcome = outcomeMap[`${nodeid}-${run.id}`];
+          
+          if (!outcome) {
+            td.textContent = "SKIP";
+            td.className += ' ' + statusClasses['skipped'];
+          } else {
+            td.textContent = outcome === 'passed' ? 'PASS' : 
+                            outcome === 'failed' ? 'FAIL' : 
+                            'SKIP';
+            td.className += ' ' + statusClasses[outcome.toLowerCase()];
+          }
+          tr.appendChild(td);
+        });
+        tbody.appendChild(tr);
+      });
+    }
+
+    // Start the refresh cycle
+    refreshTable();
+  </script>
+</body>
+</html>
