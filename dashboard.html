@@ -11,8 +11,8 @@
       theme: {
         extend: {
           colors: {
-            'test-pass': '#059669',  // More calming, deeper green
-            'test-fail': '#ef4444',  // More alarming, pure red
+            'test-pass': 'rgb(21 128 61)',   // Tailwind green-700
+            'test-fail': 'rgb(190 18 60)',   // Tailwind rose-700
             'test-skip': '#f59e0b',  // Bright amber
             'header-bg': '#f8fafc',
           }
@@ -74,8 +74,8 @@
 
     // Update the status mapping and classes
     const statusClasses = {
-      'passed': 'bg-test-pass/40 text-test-pass font-medium px-3 py-1 text-xs uppercase tracking-wider border border-test-pass/60',
-      'failed': 'bg-test-fail/40 text-test-fail font-medium px-3 py-1 text-xs uppercase tracking-wider border border-test-fail/60',
+      'passed': 'bg-green-600/80 text-white font-medium px-3 py-1 text-xs uppercase tracking-wider border border-green-700/60',
+      'failed': 'bg-red-600/80 text-white font-medium px-3 py-1 text-xs uppercase tracking-wider border border-rose-700/60',
       'skipped': 'bg-test-skip/40 text-test-skip font-medium px-3 py-1 text-xs uppercase tracking-wider border border-test-skip/60',
       'not_run': 'bg-gray-50 text-gray-400 font-medium px-3 py-1 text-xs uppercase tracking-wider border border-gray-200'
     };
