@@ -11,9 +11,10 @@
       theme: {
         extend: {
           colors: {
-            'test-pass': '#4CAF50',
-            'test-fail': '#F44336',
-            'test-skip': '#FF9800',
+            'test-pass': 'rgb(21 128 61)',   // Tailwind green-700
+            'test-fail': 'rgb(190 18 60)',   // Tailwind rose-700
+            'test-skip': '#f59e0b',  // Bright amber
+            'header-bg': '#f8fafc',
           }
         }
       }
@@ -31,18 +32,16 @@
   </style>
 </head>
 <body class="bg-gray-50">
-  <div class="w-full px-2 py-4">
-    <h1 class="text-2xl font-bold mb-4">Test History (Filtered for <code class="bg-gray-100 px-2 py-1 rounded">test/test_regressions.py</code>)</h1>
-    
-    <div class="relative overflow-x-auto shadow-md rounded-lg">
+  <div class="w-full px-6 pb-8">
+    <div class="relative overflow-x-auto shadow-lg rounded-lg border border-gray-200">
       <table id="history-table" class="w-full text-sm text-left">
         <thead>
-          <tr class="bg-gray-100">
-            <th class="sticky left-0 bg-gray-100 px-3 py-3 font-semibold w-[300px]">Test Node</th>
+          <tr class="bg-header-bg border-b border-gray-200">
+            <th class="sticky left-0 bg-header-bg px-4 py-4 font-semibold text-gray-700 w-[300px]">Test Node</th>
             <!-- Run-date columns appended by JS -->
           </tr>
         </thead>
-        <tbody>
+        <tbody class="bg-white">
           <!-- Rows appended by JS -->
         </tbody>
       </table>
@@ -75,10 +74,10 @@
 
     // Update the status mapping and classes
     const statusClasses = {
-      'passed': 'bg-test-pass text-white font-medium',
-      'failed': 'bg-test-fail text-white font-medium',
-      'skipped': 'bg-test-skip text-white font-medium',
-      'N/A': 'bg-test-skip text-white font-medium'
+      'passed': 'bg-green-600/80 text-white font-medium px-3 py-1 text-xs uppercase tracking-wider border border-green-700/60',
+      'failed': 'bg-red-600/80 text-white font-medium px-3 py-1 text-xs uppercase tracking-wider border border-rose-700/60',
+      'skipped': 'bg-test-skip/40 text-test-skip font-medium px-3 py-1 text-xs uppercase tracking-wider border border-test-skip/60',
+      'not_run': 'bg-gray-50 text-gray-400 font-medium px-3 py-1 text-xs uppercase tracking-wider border border-gray-200'
     };
 
     function sortTable(columnIndex) {
@@ -191,16 +190,23 @@
       const theadRow = document.querySelector('#history-table thead tr');
       runs.forEach((run, index) => {
         const th = document.createElement('th');
-        th.className = 'px-6 py-3 font-semibold cursor-pointer hover:bg-gray-200 transition-colors';
+        th.className = 'px-4 py-4 font-semibold text-gray-700 cursor-pointer hover:bg-gray-100 transition-colors';
         
-        // Add git hash (last 7 chars) above date/time
         const shortHash = run.githash ? run.githash.slice(-7) : 'unknown';
-        th.textContent = `${shortHash}\n${new Date(run.start).toLocaleDateString()}\n${new Date(run.start).toLocaleTimeString([], { 
-          hour: '2-digit', 
-          minute: '2-digit',
-          hour12: false
-        })}`;
-        th.style.whiteSpace = 'pre';
+        const date = new Date(run.start);
+        
+        // Create structured header content
+        th.innerHTML = `
+          <div class="flex flex-col items-center gap-1">
+            <span class="font-mono text-xs text-gray-500">${shortHash}</span>
+            <span class="text-sm">${date.toLocaleDateString()}</span>
+            <span class="text-xs text-gray-500">${date.toLocaleTimeString([], { 
+              hour: '2-digit', 
+              minute: '2-digit',
+              hour12: false
+            })}</span>
+          </div>
+        `;
         
         th.addEventListener('click', () => sortTable(index + 1));
         theadRow.appendChild(th);
@@ -219,19 +225,19 @@
         tr.className = 'border-b hover:bg-gray-50';
 
         const testCell = document.createElement('td');
-        testCell.className = 'sticky left-0 bg-white px-3 py-4 whitespace-nowrap test-name';
-        const shortNodeId = nodeid.split('::').pop();  // nodeid is already stripped of env suffix
+        testCell.className = 'sticky left-0 bg-white px-4 py-3 whitespace-nowrap test-name font-mono text-sm text-gray-700 border-r border-gray-100';
+        const shortNodeId = cleanTestName(nodeid);
         testCell.textContent = shortNodeId;
         tr.appendChild(testCell);
 
         runs.forEach(run => {
           const td = document.createElement('td');
-          td.className = 'px-3 py-4 text-center';
+          td.className = 'px-4 py-3 text-center';
           const outcome = outcomeMap[`${nodeid}-${run.id}`];
           
-          if (!outcome) {
-            td.textContent = "SKIP";
-            td.className += ' ' + statusClasses['skipped'];
+          if (!outcome || outcome === '') {
+            td.textContent = "Not Run";
+            td.className += ' ' + statusClasses['not_run'];
           } else {
             td.textContent = outcome === 'passed' ? 'PASS' : 
                             outcome === 'failed' ? 'FAIL' : 
@@ -244,8 +250,46 @@
       });
     }
 
+    // Update the cleanTestName function
+    function cleanTestName(nodeid) {
+      return nodeid
+        .split('::').pop()  // Get the last part after ::
+        .replace(/test_projects\[https?:\/\/[^\/]+\/[^\/]+\/([^\]]+)\]/g, 'test_projects[$1]')  // More specific pattern
+        .replace(/\[https?:\/\/[^\/]+\/[^\/]+\/([^\]]+)\]/g, '[$1]');  // Backup pattern
+    }
+
     // Start the refresh cycle
     refreshTable();
+
+    // Add hover effect to rows
+    document.querySelectorAll('#history-table tbody tr').forEach(row => {
+      row.classList.add('hover:bg-gray-50', 'transition-colors');
+    });
   </script>
+
+  <!-- Add custom styles -->
+  <style>
+    /* Smooth scrolling */
+    .overflow-x-auto {
+      scroll-behavior: smooth;
+    }
+    
+    /* Better sticky header shadow */
+    thead tr {
+      box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    }
+    
+    /* Fade edges when scrolling horizontally */
+    .overflow-x-auto::after {
+      content: '';
+      position: absolute;
+      top: 0;
+      right: 0;
+      bottom: 0;
+      width: 40px;
+      background: linear-gradient(to right, transparent, white);
+      pointer-events: none;
+    }
+  </style>
 </body>
 </html>
