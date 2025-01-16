@@ -17,7 +17,7 @@
             'header-bg': '#f8fafc',
           }
         }
-      }
+      } 
     }
   </script>
   <style>
@@ -33,18 +33,36 @@
 </head>
 <body class="bg-gray-50">
   <div class="w-full px-6 pb-8">
-    <div class="relative overflow-x-auto shadow-lg rounded-lg border border-gray-200">
-      <table id="history-table" class="w-full text-sm text-left">
-        <thead>
-          <tr class="bg-header-bg border-b border-gray-200">
-            <th class="sticky left-0 bg-header-bg px-4 py-4 font-semibold text-gray-700 w-[300px]">Test Node</th>
-            <!-- Run-date columns appended by JS -->
-          </tr>
-        </thead>
-        <tbody class="bg-white">
-          <!-- Rows appended by JS -->
-        </tbody>
-      </table>
+    <!-- Fable Examples Table -->
+    <div class="mb-8">
+      <div class="relative shadow-lg rounded-lg border border-gray-200">
+        <table id="fabll-table" class="w-full text-sm text-left">
+          <thead>
+            <tr class="bg-header-bg border-b border-gray-200">
+              <th class="sticky left-0 bg-header-bg px-4 py-4 font-semibold text-gray-700 w-[300px]">Fabll Examples</th>
+            </tr>
+          </thead>
+          <tbody class="bg-white">
+          </tbody>
+        </table>
+      </div>
+      <div id="fabll-last-run" class="mt-2 text-sm text-gray-500 px-2"></div>
+    </div>
+
+    <!-- Projects Table -->
+    <div>
+      <div class="relative shadow-lg rounded-lg border border-gray-200">
+        <table id="projects-table" class="w-full text-sm text-left">
+          <thead>
+            <tr class="bg-header-bg border-b border-gray-200">
+              <th class="sticky left-0 bg-header-bg px-4 py-4 font-semibold text-gray-700 w-[300px]">Projects</th>
+            </tr>
+          </thead>
+          <tbody class="bg-white">
+          </tbody>
+        </table>
+      </div>
+      <div id="projects-last-run" class="mt-2 text-sm text-gray-500 px-2"></div>
     </div>
   </div>
 
@@ -53,22 +71,26 @@
 
     const SUPABASE_URL = 'https://ynesgbuoxmszjrkzazxz.supabase.co';
     const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InluZXNnYnVveG1zempya3phenh6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzQzNzg5NDYsImV4cCI6MjA0OTk1NDk0Nn0.6KxEoSHTgyV4jKnnLAG5-Y9tWfHOzpl0qnA_NPzGUBo';
+    console.log('GITHUB_TOKEN:', typeof GITHUB_TOKEN !== 'undefined' ? 'defined' : 'undefined');
     const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-    const MAX_RUNS = 100000;
+    const FETCH_LIMIT = 1000;  // Fetch more runs to ensure we get enough valid ones
+    const DISPLAY_RUNS = 12;  // Show only 12 runs in the UI
     const REFRESH_INTERVAL = 5 * 60 * 1000;  // Refresh every 5 minutes
+    const DEBUG = true;  // Debug flag for logging
 
     async function refreshTable() {
-      // Clear existing table content
-      document.querySelector('#history-table thead tr').innerHTML = `
-        <th class="sticky left-0 bg-gray-100 px-3 py-3 font-semibold w-[300px]">Test Node</th>
+      document.querySelector('#fabll-table thead tr').innerHTML = `
+        <th class="sticky left-0 bg-gray-100 px-3 py-3 font-semibold w-[300px]">Fabll Examples</th>
       `;
-      document.querySelector('#history-table tbody').innerHTML = '';
+      document.querySelector('#projects-table thead tr').innerHTML = `
+        <th class="sticky left-0 bg-gray-100 px-3 py-3 font-semibold w-[300px]">Projects</th>
+      `;
+      document.querySelector('#fabll-table tbody').innerHTML = '';
+      document.querySelector('#projects-table tbody').innerHTML = '';
       
-      // Rebuild the table
       await buildHistoryTable();
       
-      // Schedule next refresh
       setTimeout(refreshTable, REFRESH_INTERVAL);
     }
 
@@ -124,23 +146,62 @@
       rows.forEach(row => tbody.appendChild(row));
     }
 
+    // Add helper function to format time ago
+    function timeAgo(date) {
+      const seconds = Math.floor((new Date() - date) / 1000);
+      
+      let interval = seconds / 31536000;
+      if (interval > 1) return Math.floor(interval) + ' years ago';
+      
+      interval = seconds / 2592000;
+      if (interval > 1) return Math.floor(interval) + ' months ago';
+      
+      interval = seconds / 86400;
+      if (interval > 1) return Math.floor(interval) + ' days ago';
+      
+      interval = seconds / 3600;
+      if (interval > 1) return Math.floor(interval) + ' hours ago';
+      
+      interval = seconds / 60;
+      if (interval > 1) return Math.floor(interval) + ' minutes ago';
+      
+      return Math.floor(seconds) + ' seconds ago';
+    }
+
+    // Update buildHistoryTable to show last run times
     async function buildHistoryTable() {
+      if (DEBUG) console.log('=== Starting buildHistoryTable ===');
       // 1. Fetch the most recent runs first
       let { data: allRuns, error: runsError } = await supabase
         .from('test_runs')
         .select('id, start, githash')
-        .order('start', { ascending: false })
-        .limit(MAX_RUNS);
+        .order('id', { ascending: false })
+        .limit(FETCH_LIMIT);
       if (runsError) {
         console.error('Error fetching test_runs:', runsError);
         return;
+      }
+
+      if (DEBUG) console.log('Initial allRuns:', allRuns.map(r => r.id));
+
+      // Ensure runs are properly ordered by ID (highest/newest first)
+      allRuns = allRuns.sort((a, b) => b.id - a.id);
+      if (DEBUG) console.log('Sorted run IDs:', allRuns.map(r => r.id).join(', '));
+
+      // Log all runs for debugging
+      if (DEBUG) {
+        console.log('All runs:', allRuns.map(run => ({
+          id: run.id,
+          date: new Date(run.start).toISOString(),
+          githash: run.githash
+        })));
       }
 
       // 2. Fetch test results for these specific runs
       let { data: regressionResults, error: resultsError } = await supabase
         .from('test_results')
         .select('*')
-        .eq('file', 'test/test_regressions.py')
+        .in('file', ['test/test_regressions.py', 'test/test_examples.py'])
         .in('test_runs_id', allRuns.map(run => run.id))
         .order('test_runs_id', { ascending: false });
       if (resultsError) {
@@ -148,23 +209,20 @@
         return;
       }
 
-      let runs = allRuns;  // Use all runs without filtering
-
-      // Filter out runs where all tests were skipped
-      runs = runs.filter(run => {
-        const runResults = regressionResults.filter(r => r.test_runs_id === run.id);
-        console.log(`Run ${run.id} (${new Date(run.start).toISOString()}) has ${runResults.length} results`);
-        const hasNonSkip = runResults.some(result => result.outcome === 'passed' || result.outcome === 'failed');
-        if (!hasNonSkip) {
-          console.log(`Filtering out run ${run.id} as all results were skipped`);
+      // Log raw test results
+      if (DEBUG) console.log('Raw test results:', regressionResults);
+      
+      // Group results by run for easier debugging
+      const resultsByRun = {};
+      regressionResults.forEach(result => {
+        if (!resultsByRun[result.test_runs_id]) {
+          resultsByRun[result.test_runs_id] = [];
         }
-        return hasNonSkip;
+        resultsByRun[result.test_runs_id].push(result);
       });
+      if (DEBUG) console.log('Results grouped by run:', resultsByRun);
 
-      // Possibly limit to the last MAX_RUNS columns
-      if (runs.length > MAX_RUNS) {
-        runs = runs.slice(runs.length - MAX_RUNS);
-      }
+      let runs = allRuns;  // Use all runs without filtering
 
       // 3. Build a map: (nodeid, runID) -> outcome, plus gather node IDs
       const outcomeMap = {};
@@ -177,50 +235,206 @@
           .replace(/-env\d+(?=-)/, '');                // Remove -envX in the middle
         nodeSet.add(baseNodeId);
         
+        // Log each result processing
+        if (DEBUG) {
+          console.log('Processing result:', {
+            original_nodeid: r.nodeid,
+            cleaned_nodeid: baseNodeId,
+            run_id: r.test_runs_id,
+            outcome: r.outcome,
+            file: r.file
+          });
+        }
+        
         // Combine results, prioritizing PASS/FAIL over SKIP
         const key = `${baseNodeId}-${r.test_runs_id}`;
         const existingOutcome = outcomeMap[key];
         if (!existingOutcome || 
             (existingOutcome === 'skipped' && (r.outcome === 'passed' || r.outcome === 'failed'))) {
           outcomeMap[key] = r.outcome;
+          if (DEBUG) console.log(`Setting outcome for ${key} to ${r.outcome}`);
         }
       });
 
-      // Build table headers for each run
-      const theadRow = document.querySelector('#history-table thead tr');
-      runs.forEach((run, index) => {
-        const th = document.createElement('th');
-        th.className = 'px-4 py-4 font-semibold text-gray-700 cursor-pointer hover:bg-gray-100 transition-colors';
+      // Log final outcome map
+      if (DEBUG) {
+        console.log('Final outcome map:', outcomeMap);
+        console.log('All unique node IDs:', Array.from(nodeSet));
+      }
+
+      // Split node IDs into two groups
+      const fabllNodes = Array.from(nodeSet).filter(node => node.includes('test_fabll_example'));
+      const projectNodes = Array.from(nodeSet).filter(node => node.includes('test_projects'));
+
+      // Filter runs for each table to only include runs with actual results
+      const fabllRuns = runs.filter(run => {
+        return fabllNodes.some(nodeid => {
+          const outcome = outcomeMap[`${nodeid}-${run.id}`];
+          return outcome && outcome !== '';
+        });
+      }).sort((a, b) => b.id - a.id);
+
+      const projectRuns = runs.filter(run => {
+        return projectNodes.some(nodeid => {
+          const outcome = outcomeMap[`${nodeid}-${run.id}`];
+          return outcome && outcome !== '';
+        });
+      }).sort((a, b) => b.id - a.id);
+
+      // Filter and limit fabll runs
+      if (DEBUG) console.log('Before filtering fabllRuns:', fabllRuns.map(r => r.id));
+      const validFabllRuns = fabllRuns.filter(run => {
+        return fabllNodes.some(nodeid => {
+          const outcome = outcomeMap[`${nodeid}-${run.id}`];
+          return outcome === 'passed' || outcome === 'failed' || outcome === 'skipped';
+        });
+      }).sort((a, b) => b.id - a.id).slice(0, DISPLAY_RUNS);
+      if (DEBUG) console.log('After filtering validFabllRuns:', validFabllRuns.map(r => r.id));
+
+      // Filter and limit project runs
+      if (DEBUG) console.log('Before filtering projectRuns:', projectRuns.map(r => r.id));
+      const validProjectRuns = projectRuns.filter(run => {
+        return projectNodes.some(nodeid => {
+          const outcome = outcomeMap[`${nodeid}-${run.id}`];
+          return outcome === 'passed' || outcome === 'failed' || outcome === 'skipped';
+        });
+      }).sort((a, b) => b.id - a.id).slice(0, DISPLAY_RUNS);
+      if (DEBUG) console.log('After filtering validProjectRuns:', validProjectRuns.map(r => r.id));
+
+      // After filtering runs, update last run times
+      if (validFabllRuns.length > 0) {
+        const lastFabllRun = new Date(validFabllRuns[0].start);
+        document.querySelector('#fabll-last-run').textContent = 
+          `Last run ${timeAgo(lastFabllRun)}`;
+      } else {
+        document.querySelector('#fabll-last-run').textContent = 
+          'No recent runs';
+      }
+      
+      if (validProjectRuns.length > 0) {
+        const lastProjectRun = new Date(validProjectRuns[0].start);
+        document.querySelector('#projects-last-run').textContent = 
+          `Last run ${timeAgo(lastProjectRun)}`;
+      } else {
+        document.querySelector('#projects-last-run').textContent = 
+          'No recent runs';
+      }
+
+      // Build headers for both tables with their filtered runs
+      buildTableHeaders('#fabll-table', validFabllRuns);
+      buildTableHeaders('#projects-table', validProjectRuns);
+
+      // Build rows for each table with their filtered runs
+      buildTableRows('#fabll-table', fabllNodes, validFabllRuns, outcomeMap);
+      buildTableRows('#projects-table', projectNodes, validProjectRuns, outcomeMap);
+    }
+
+    // Add GitHub API function
+    async function fetchCommitAuthors(commits) {
+      // Filter out commits we already have cached
+      const uncachedCommits = commits.filter(hash => {
+        if (!hash) return false;
+        return !sessionStorage.getItem(`author-${hash}`);
+      });
+      
+      // If all commits are cached, return early
+      if (uncachedCommits.length === 0) return;
+      
+      try {
+        // Fetch all commits in one request
+        if (DEBUG) {
+          console.log('Fetching commit authors for:', uncachedCommits);
+          console.log('First commit hash:', uncachedCommits[0]);
+          console.log('Number of commits to fetch:', uncachedCommits.length);
+        }
+        const response = await fetch(
+          `https://api.github.com/repos/atopile/atopile/commits?sha=${uncachedCommits[0]}&per_page=${uncachedCommits.length}`, {
+          headers: {
+            'Accept': 'application/vnd.github.v3+json'
+          }
+        });
         
-        const shortHash = run.githash ? run.githash.slice(-7) : 'unknown';
+        if (response.ok) {
+          const commits = await response.json();
+          commits.forEach(commit => {
+            if (commit.author?.login) {
+              sessionStorage.setItem(`author-${commit.sha}`, commit.author.login);
+            }
+          });
+        } else if (response.status === 403) {
+          console.warn('GitHub API rate limit exceeded');
+        }
+      } catch (error) {
+        console.error('Error fetching commit authors:', error);
+      }
+    }
+
+    function buildTableHeaders(tableId, runs) {
+      const theadRow = document.querySelector(`${tableId} thead tr`);
+      // Create all headers first
+      const headers = runs.map((run, index) => {
+        const th = document.createElement('th');
+        th.className = 'px-3 py-3 font-semibold text-gray-700 cursor-pointer hover:bg-gray-50 transition-colors border-l border-gray-200';
+        
+        const shortHash = run.githash ? run.githash.slice(0, 7) : 'unknown';
         const date = new Date(run.start);
         
-        // Create structured header content
+        // Create structured header content with full hash in tooltip
         th.innerHTML = `
-          <div class="flex flex-col items-center gap-1">
-            <span class="font-mono text-xs text-gray-500">${shortHash}</span>
-            <span class="text-sm">${date.toLocaleDateString()}</span>
-            <span class="text-xs text-gray-500">${date.toLocaleTimeString([], { 
-              hour: '2-digit', 
-              minute: '2-digit',
-              hour12: false
-            })}</span>
+          <div class="flex flex-col items-center gap-1.5 min-w-[100px]">
+            <div class="flex items-center gap-1.5">
+              <span class="text-[10px] text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded">#${run.id}</span>
+              <span class="font-mono text-xs font-medium text-gray-600 bg-gray-100 px-1.5 py-0.5 rounded" title="${run.githash || 'No hash'}">${shortHash}</span>
+            </div>
+            <span class="text-[11px] font-medium text-gray-500" data-githash="${run.githash}">loading...</span>
+            <div class="flex flex-col items-center">
+              <span class="text-xs font-medium text-gray-600">${date.toLocaleDateString()}</span>
+              <span class="text-[10px] text-gray-500">${date.toLocaleTimeString([], { 
+                hour: '2-digit', 
+                minute: '2-digit',
+                hour12: false
+              })}</span>
+            </div>
           </div>
         `;
         
         th.addEventListener('click', () => sortTable(index + 1));
-        theadRow.appendChild(th);
+        return th;
+      });
+
+      // Add all headers in order
+      headers.forEach(th => theadRow.appendChild(th));
+      
+      // Fetch all commit authors at once
+      fetchCommitAuthors(runs.map(run => run.githash)).then(() => {
+        // Update all author spans with cached values
+        headers.forEach((th, index) => {
+          const githash = runs[index].githash;
+          const authorSpan = th.querySelector(`[data-githash="${githash}"]`);
+          if (authorSpan) {
+            const author = sessionStorage.getItem(`author-${githash}`) || 'unknown';
+            authorSpan.textContent = `@${author}`;
+          }
+        });
       });
 
       // Add click handler to the Test Node column header
       const firstTh = theadRow.querySelector('th');
       firstTh.className += ' cursor-pointer hover:bg-gray-200 transition-colors';
       firstTh.addEventListener('click', () => sortTable(0));
+    }
 
-      // 4. For each node ID, build a row for these runs
-      const tbody = document.querySelector('#history-table tbody');
-      const allNodeIds = Array.from(nodeSet).sort();
-      allNodeIds.forEach(nodeid => {
+    function buildTableRows(tableId, nodes, runs, outcomeMap) {
+      const tbody = document.querySelector(`${tableId} tbody`);
+      // Filter nodes to only include those with at least one actual result
+      const nodesWithResults = nodes.filter(nodeid => {
+        return runs.some(run => {
+          const outcome = outcomeMap[`${nodeid}-${run.id}`];
+          return outcome && outcome !== '';
+        });
+      });
+      
+      nodesWithResults.sort().forEach(nodeid => {
         const tr = document.createElement('tr');
         tr.className = 'border-b hover:bg-gray-50';
 
@@ -269,26 +483,19 @@
 
   <!-- Add custom styles -->
   <style>
-    /* Smooth scrolling */
-    .overflow-x-auto {
-      scroll-behavior: smooth;
-    }
-    
     /* Better sticky header shadow */
     thead tr {
-      box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+      box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+      background: linear-gradient(to bottom, #ffffff, #fafafa);
     }
     
-    /* Fade edges when scrolling horizontally */
-    .overflow-x-auto::after {
-      content: '';
-      position: absolute;
-      top: 0;
-      right: 0;
-      bottom: 0;
-      width: 40px;
-      background: linear-gradient(to right, transparent, white);
-      pointer-events: none;
+    /* Improve header cell appearance */
+    th {
+      transition: all 0.2s ease;
+    }
+    
+    th:hover {
+      background: linear-gradient(to bottom, #f8fafc, #f1f5f9);
     }
   </style>
 </body>
