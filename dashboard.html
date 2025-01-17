@@ -488,7 +488,7 @@
       const name = nodeid
         .split('::').pop()  // Get the last part after ::
         .replace(/test_examples_build\[(.*?)\]/, '$1')  // Extract name from new format
-        .replace(/test_projects\[https?:\/\/[^\/]+\/[^\/]+\/([^\]]+)\]/g, 'test_projects[$1]')  // More specific pattern
+        .replace(/test_projects\[https?:\/\/[^\/]+\/[^\/]+\/([^\]]+)\]/g, '$1')  // More specific pattern
         .replace(/\[https?:\/\/[^\/]+\/[^\/]+\/([^\]]+)\]/g, '[$1]');  // Backup pattern
       
       // Clean up any leftover brackets or dashes at the start
