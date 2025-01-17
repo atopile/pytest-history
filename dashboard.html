@@ -148,7 +148,7 @@
 
     // Add helper function to format time ago
     function timeAgo(date) {
-      const seconds = Math.floor((new Date() - date) / 1000);
+      const seconds = Math.floor((new Date() - new Date(date)) / 1000);
       
       let interval = seconds / 31536000;
       if (interval > 1) return Math.floor(interval) + ' years ago';
@@ -393,7 +393,7 @@
         th.className = 'px-3 py-3 font-semibold text-gray-700 cursor-pointer hover:bg-gray-50 transition-colors border-l border-gray-200';
         
         const shortHash = run.githash ? run.githash.slice(0, 7) : 'unknown';
-        const date = new Date(run.start);
+        const date = new Date(run.start);  // PostgreSQL timestamp is already in ISO format
         
         // Create structured header content with full hash in tooltip
         th.innerHTML = `
@@ -405,7 +405,10 @@
             <span class="text-[11px] font-medium text-gray-500" data-githash="${run.githash}">loading...</span>
             <span class="text-[10px] font-medium text-gray-400" data-branch="${run.githash}"></span>
             <div class="flex flex-col items-center">
-              <span class="text-xs font-medium text-gray-600">${date.toLocaleDateString()}</span>
+              <span class="text-xs font-medium text-gray-600">${date.toLocaleDateString(undefined, { 
+                month: 'short', 
+                day: 'numeric'
+              })}</span>
               <span class="text-[10px] text-gray-500">${date.toLocaleTimeString([], { 
                 hour: '2-digit', 
                 minute: '2-digit',
