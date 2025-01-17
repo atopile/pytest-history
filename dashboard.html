@@ -39,7 +39,7 @@
         <table id="fabll-table" class="w-full text-sm text-left">
           <thead>
             <tr class="bg-header-bg border-b border-gray-200">
-              <th class="sticky left-0 bg-header-bg px-4 py-4 font-semibold text-gray-700 w-[300px]">Fabll Examples</th>
+              <th class="sticky left-0 bg-gray-100 px-3 py-3 font-semibold w-[300px]">Examples</th>
             </tr>
           </thead>
           <tbody class="bg-white">
@@ -81,7 +81,7 @@
 
     async function refreshTable() {
       document.querySelector('#fabll-table thead tr').innerHTML = `
-        <th class="sticky left-0 bg-gray-100 px-3 py-3 font-semibold w-[300px]">Fabll Examples</th>
+        <th class="sticky left-0 bg-gray-100 px-3 py-3 font-semibold w-[300px]">Examples</th>
       `;
       document.querySelector('#projects-table thead tr').innerHTML = `
         <th class="sticky left-0 bg-gray-100 px-3 py-3 font-semibold w-[300px]">Projects</th>
@@ -263,7 +263,9 @@
       }
 
       // Split node IDs into two groups
-      const fabllNodes = Array.from(nodeSet).filter(node => node.includes('test_fabll_example'));
+      const fabllNodes = Array.from(nodeSet).filter(node => 
+        node.includes('test_examples.py::test_examples_build[ch')
+      );
       const projectNodes = Array.from(nodeSet).filter(node => node.includes('test_projects'));
 
       // Filter runs for each table to only include runs with actual results
@@ -334,33 +336,47 @@
       // Filter out commits we already have cached
       const uncachedCommits = commits.filter(hash => {
         if (!hash) return false;
-        return !sessionStorage.getItem(`author-${hash}`);
+        return !sessionStorage.getItem(`commit-${hash}`);
       });
       
       // If all commits are cached, return early
       if (uncachedCommits.length === 0) return;
       
       try {
-        // Fetch all commits in one request
         if (DEBUG) {
           console.log('Fetching commit authors for:', uncachedCommits);
           console.log('First commit hash:', uncachedCommits[0]);
           console.log('Number of commits to fetch:', uncachedCommits.length);
         }
+
+        // First get the commit info
         const response = await fetch(
-          `https://api.github.com/repos/atopile/atopile/commits?sha=${uncachedCommits[0]}&per_page=${uncachedCommits.length}`, {
+          `https://api.github.com/repos/atopile/atopile/commits/${uncachedCommits[0]}`, {
           headers: {
             'Accept': 'application/vnd.github.v3+json'
           }
         });
         
         if (response.ok) {
-          const commits = await response.json();
-          commits.forEach(commit => {
-            if (commit.author?.login) {
-              sessionStorage.setItem(`author-${commit.sha}`, commit.author.login);
+          const commit = await response.json();
+          // Then get the branch info
+          const branchResponse = await fetch(
+            `https://api.github.com/repos/atopile/atopile/commits/${commit.sha}/branches-where-head`, {
+            headers: {
+              'Accept': 'application/vnd.github.v3+json'
             }
           });
+          
+          const branches = branchResponse.ok ? await branchResponse.json() : [];
+          const branch = branches.length > 0 ? branches[0].name : 'main';
+          
+          if (commit) {
+            const commitInfo = {
+              author: commit.author?.login || 'unknown',
+              branch: branch
+            };
+            sessionStorage.setItem(`commit-${commit.sha}`, JSON.stringify(commitInfo));
+          }
         } else if (response.status === 403) {
           console.warn('GitHub API rate limit exceeded');
         }
@@ -387,6 +403,7 @@
               <span class="font-mono text-xs font-medium text-gray-600 bg-gray-100 px-1.5 py-0.5 rounded" title="${run.githash || 'No hash'}">${shortHash}</span>
             </div>
             <span class="text-[11px] font-medium text-gray-500" data-githash="${run.githash}">loading...</span>
+            <span class="text-[10px] font-medium text-gray-400" data-branch="${run.githash}"></span>
             <div class="flex flex-col items-center">
               <span class="text-xs font-medium text-gray-600">${date.toLocaleDateString()}</span>
               <span class="text-[10px] text-gray-500">${date.toLocaleTimeString([], { 
@@ -411,9 +428,11 @@
         headers.forEach((th, index) => {
           const githash = runs[index].githash;
           const authorSpan = th.querySelector(`[data-githash="${githash}"]`);
-          if (authorSpan) {
-            const author = sessionStorage.getItem(`author-${githash}`) || 'unknown';
-            authorSpan.textContent = `@${author}`;
+          const branchSpan = th.querySelector(`[data-branch="${githash}"]`);
+          if (authorSpan && branchSpan) {
+            const commitInfo = JSON.parse(sessionStorage.getItem(`commit-${githash}`) || '{"author":"unknown","branch":"main"}');
+            authorSpan.textContent = `@${commitInfo.author}`;
+            branchSpan.textContent = commitInfo.branch;
           }
         });
       });
@@ -466,10 +485,14 @@
 
     // Update the cleanTestName function
     function cleanTestName(nodeid) {
-      return nodeid
+      const name = nodeid
         .split('::').pop()  // Get the last part after ::
+        .replace(/test_examples_build\[(.*?)\]/, '$1')  // Extract name from new format
         .replace(/test_projects\[https?:\/\/[^\/]+\/[^\/]+\/([^\]]+)\]/g, 'test_projects[$1]')  // More specific pattern
         .replace(/\[https?:\/\/[^\/]+\/[^\/]+\/([^\]]+)\]/g, '[$1]');  // Backup pattern
+      
+      // Clean up any leftover brackets or dashes at the start
+      return name.replace(/^[\[-]/, '');
     }
 
     // Start the refresh cycle
