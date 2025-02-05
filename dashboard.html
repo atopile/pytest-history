@@ -329,10 +329,48 @@
       // Build rows for each table with their filtered runs
       buildTableRows('#fabll-table', fabllNodes, validFabllRuns, outcomeMap);
       buildTableRows('#projects-table', projectNodes, validProjectRuns, outcomeMap);
+
+      // Fetch commit info for all runs
+      await fetchCommitAuthors(allRuns.map(run => run.githash));
+      
+      // Filter runs to only include those on main
+      allRuns = allRuns.filter(run => {
+        if (!run.githash) return false;
+        const commitInfo = sessionStorage.getItem(`commit-${run.githash}`);
+        return commitInfo !== null;  // If we have commit info, it's on main
+      });
     }
 
     // Add GitHub API function
     async function fetchCommitAuthors(commits) {
+      // Get main branch's history first
+      try {
+        const mainResponse = await fetch(
+          'https://api.github.com/repos/atopile/atopile/commits?sha=main&per_page=100', {
+          headers: {
+            'Accept': 'application/vnd.github.v3+json'
+          }
+        });
+        
+        if (!mainResponse.ok) {
+          console.error('Failed to fetch main branch history');
+          return;
+        }
+        
+        const mainHistory = await mainResponse.json();
+        const mainCommits = new Set(mainHistory.map(commit => commit.sha));
+        
+        if (DEBUG) {
+          console.log('Found commits on main:', mainCommits);
+        }
+        
+        // Filter commits to only those in main's history
+        commits = commits.filter(hash => hash && mainCommits.has(hash));
+      } catch (error) {
+        console.error('Error fetching main branch history:', error);
+        return;
+      }
+
       // Filter out commits we already have cached
       const uncachedCommits = commits.filter(hash => {
         if (!hash) return false;
@@ -345,40 +383,32 @@
       try {
         if (DEBUG) {
           console.log('Fetching commit authors for:', uncachedCommits);
-          console.log('First commit hash:', uncachedCommits[0]);
-          console.log('Number of commits to fetch:', uncachedCommits.length);
         }
 
-        // First get the commit info
-        const response = await fetch(
-          `https://api.github.com/repos/atopile/atopile/commits/${uncachedCommits[0]}`, {
-          headers: {
-            'Accept': 'application/vnd.github.v3+json'
-          }
-        });
-        
-        if (response.ok) {
-          const commit = await response.json();
-          // Then get the branch info
-          const branchResponse = await fetch(
-            `https://api.github.com/repos/atopile/atopile/commits/${commit.sha}/branches-where-head`, {
-            headers: {
-              'Accept': 'application/vnd.github.v3+json'
+        // Get commit info for each commit
+        for (const hash of uncachedCommits) {
+          const response = await fetch(
+            `https://api.github.com/repos/atopile/atopile/commits/${hash}`,
+            {
+              headers: {
+                'Accept': 'application/vnd.github.v3+json'
+              }
             }
-          });
+          );
           
-          const branches = branchResponse.ok ? await branchResponse.json() : [];
-          const branch = branches.length > 0 ? branches[0].name : 'main';
-          
-          if (commit) {
-            const commitInfo = {
-              author: commit.author?.login || 'unknown',
-              branch: branch
-            };
-            sessionStorage.setItem(`commit-${commit.sha}`, JSON.stringify(commitInfo));
+          if (response.ok) {
+            const commit = await response.json();
+            
+            if (commit) {
+              const commitInfo = {
+                author: commit.author?.login || 'unknown',
+                branch: 'main'  // We know it's on main since we filtered
+              };
+              sessionStorage.setItem(`commit-${commit.sha}`, JSON.stringify(commitInfo));
+            }
+          } else if (response.status === 403) {
+            console.warn('GitHub API rate limit exceeded');
           }
-        } else if (response.status === 403) {
-          console.warn('GitHub API rate limit exceeded');
         }
       } catch (error) {
         console.error('Error fetching commit authors:', error);
