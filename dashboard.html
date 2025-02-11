@@ -17,7 +17,7 @@
             'header-bg': '#f8fafc',
           }
         }
-      } 
+      }
     }
   </script>
   <style>
@@ -88,9 +88,9 @@
       `;
       document.querySelector('#fabll-table tbody').innerHTML = '';
       document.querySelector('#projects-table tbody').innerHTML = '';
-      
+
       await buildHistoryTable();
-      
+
       setTimeout(refreshTable, REFRESH_INTERVAL);
     }
 
@@ -105,17 +105,17 @@
     function sortTable(columnIndex) {
       const tbody = document.querySelector('#history-table tbody');
       const rows = Array.from(tbody.querySelectorAll('tr'));
-      
+
       // Get current sort direction from the header
       const th = document.querySelector(`#history-table th:nth-child(${columnIndex + 1})`);
       const ascending = th.dataset.sortDir !== 'asc';
-      
+
       // Update sort direction indicators on all headers
       document.querySelectorAll('#history-table th').forEach(header => {
         header.dataset.sortDir = '';
         header.classList.remove('after:content-["↑"]', 'after:content-["↓"]', 'after:ml-2');
       });
-      
+
       // Update current header's sort direction
       th.dataset.sortDir = ascending ? 'asc' : 'desc';
       th.classList.add(
@@ -127,11 +127,11 @@
       rows.sort((rowA, rowB) => {
         const cellA = rowA.cells[columnIndex].textContent;
         const cellB = rowB.cells[columnIndex].textContent;
-        
+
         if (columnIndex === 0) {
           // Sort test names alphabetically
-          return ascending ? 
-            cellA.localeCompare(cellB) : 
+          return ascending ?
+            cellA.localeCompare(cellB) :
             cellB.localeCompare(cellA);
         } else {
           // Sort test results (PASS > FAIL > SKIP > N/A)
@@ -149,22 +149,22 @@
     // Add helper function to format time ago
     function timeAgo(date) {
       const seconds = Math.floor((new Date() - new Date(date)) / 1000);
-      
+
       let interval = seconds / 31536000;
       if (interval > 1) return Math.floor(interval) + ' years ago';
-      
+
       interval = seconds / 2592000;
       if (interval > 1) return Math.floor(interval) + ' months ago';
-      
+
       interval = seconds / 86400;
       if (interval > 1) return Math.floor(interval) + ' days ago';
-      
+
       interval = seconds / 3600;
       if (interval > 1) return Math.floor(interval) + ' hours ago';
-      
+
       interval = seconds / 60;
       if (interval > 1) return Math.floor(interval) + ' minutes ago';
-      
+
       return Math.floor(seconds) + ' seconds ago';
     }
 
@@ -211,7 +211,7 @@
 
       // Log raw test results
       if (DEBUG) console.log('Raw test results:', regressionResults);
-      
+
       // Group results by run for easier debugging
       const resultsByRun = {};
       regressionResults.forEach(result => {
@@ -234,7 +234,7 @@
           .replace(/\[([^\]]+)-env\d+([^\]]*)\]/, '[$1$2]')  // Remove -envX inside brackets
           .replace(/-env\d+(?=-)/, '');                // Remove -envX in the middle
         nodeSet.add(baseNodeId);
-        
+
         // Log each result processing
         if (DEBUG) {
           console.log('Processing result:', {
@@ -242,17 +242,21 @@
             cleaned_nodeid: baseNodeId,
             run_id: r.test_runs_id,
             outcome: r.outcome,
-            file: r.file
+            file: r.file,
+            duration: r.duration
           });
         }
-        
+
         // Combine results, prioritizing PASS/FAIL over SKIP
         const key = `${baseNodeId}-${r.test_runs_id}`;
         const existingOutcome = outcomeMap[key];
-        if (!existingOutcome || 
-            (existingOutcome === 'skipped' && (r.outcome === 'passed' || r.outcome === 'failed'))) {
-          outcomeMap[key] = r.outcome;
-          if (DEBUG) console.log(`Setting outcome for ${key} to ${r.outcome}`);
+        if (!existingOutcome ||
+            (existingOutcome.outcome === 'skipped' && (r.outcome === 'passed' || r.outcome === 'failed'))) {
+          outcomeMap[key] = {
+            outcome: r.outcome,
+            duration: r.duration
+          };
+          if (DEBUG) console.log(`Setting outcome for ${key} to ${r.outcome} with duration ${r.duration}`);
         }
       });
 
@@ -263,7 +267,7 @@
       }
 
       // Split node IDs into two groups
-      const fabllNodes = Array.from(nodeSet).filter(node => 
+      const fabllNodes = Array.from(nodeSet).filter(node =>
         node.includes('test_examples.py::test_examples_build[ch')
       );
       const projectNodes = Array.from(nodeSet).filter(node => node.includes('test_projects'));
@@ -272,14 +276,14 @@
       const fabllRuns = runs.filter(run => {
         return fabllNodes.some(nodeid => {
           const outcome = outcomeMap[`${nodeid}-${run.id}`];
-          return outcome && outcome !== '';
+          return outcome && outcome.outcome !== '';
         });
       }).sort((a, b) => b.id - a.id);
 
       const projectRuns = runs.filter(run => {
         return projectNodes.some(nodeid => {
           const outcome = outcomeMap[`${nodeid}-${run.id}`];
-          return outcome && outcome !== '';
+          return outcome && outcome.outcome !== '';
         });
       }).sort((a, b) => b.id - a.id);
 
@@ -288,7 +292,7 @@
       const validFabllRuns = fabllRuns.filter(run => {
         return fabllNodes.some(nodeid => {
           const outcome = outcomeMap[`${nodeid}-${run.id}`];
-          return outcome === 'passed' || outcome === 'failed' || outcome === 'skipped';
+          return outcome && (outcome.outcome === 'passed' || outcome.outcome === 'failed' || outcome.outcome === 'skipped');
         });
       }).sort((a, b) => b.id - a.id).slice(0, DISPLAY_RUNS);
       if (DEBUG) console.log('After filtering validFabllRuns:', validFabllRuns.map(r => r.id));
@@ -298,7 +302,7 @@
       const validProjectRuns = projectRuns.filter(run => {
         return projectNodes.some(nodeid => {
           const outcome = outcomeMap[`${nodeid}-${run.id}`];
-          return outcome === 'passed' || outcome === 'failed' || outcome === 'skipped';
+          return outcome && (outcome.outcome === 'passed' || outcome.outcome === 'failed' || outcome.outcome === 'skipped');
         });
       }).sort((a, b) => b.id - a.id).slice(0, DISPLAY_RUNS);
       if (DEBUG) console.log('After filtering validProjectRuns:', validProjectRuns.map(r => r.id));
@@ -306,19 +310,19 @@
       // After filtering runs, update last run times
       if (validFabllRuns.length > 0) {
         const lastFabllRun = new Date(validFabllRuns[0].start);
-        document.querySelector('#fabll-last-run').textContent = 
+        document.querySelector('#fabll-last-run').textContent =
           `Last run ${timeAgo(lastFabllRun)}`;
       } else {
-        document.querySelector('#fabll-last-run').textContent = 
+        document.querySelector('#fabll-last-run').textContent =
           'No recent runs';
       }
-      
+
       if (validProjectRuns.length > 0) {
         const lastProjectRun = new Date(validProjectRuns[0].start);
-        document.querySelector('#projects-last-run').textContent = 
+        document.querySelector('#projects-last-run').textContent =
           `Last run ${timeAgo(lastProjectRun)}`;
       } else {
-        document.querySelector('#projects-last-run').textContent = 
+        document.querySelector('#projects-last-run').textContent =
           'No recent runs';
       }
 
@@ -332,7 +336,7 @@
 
       // Fetch commit info for all runs
       await fetchCommitAuthors(allRuns.map(run => run.githash));
-      
+
       // Filter runs to only include those on main
       allRuns = allRuns.filter(run => {
         if (!run.githash) return false;
@@ -351,19 +355,19 @@
             'Accept': 'application/vnd.github.v3+json'
           }
         });
-        
+
         if (!mainResponse.ok) {
           console.error('Failed to fetch main branch history');
           return;
         }
-        
+
         const mainHistory = await mainResponse.json();
         const mainCommits = new Set(mainHistory.map(commit => commit.sha));
-        
+
         if (DEBUG) {
           console.log('Found commits on main:', mainCommits);
         }
-        
+
         // Filter commits to only those in main's history
         commits = commits.filter(hash => hash && mainCommits.has(hash));
       } catch (error) {
@@ -376,10 +380,10 @@
         if (!hash) return false;
         return !sessionStorage.getItem(`commit-${hash}`);
       });
-      
+
       // If all commits are cached, return early
       if (uncachedCommits.length === 0) return;
-      
+
       try {
         if (DEBUG) {
           console.log('Fetching commit authors for:', uncachedCommits);
@@ -395,10 +399,10 @@
               }
             }
           );
-          
+
           if (response.ok) {
             const commit = await response.json();
-            
+
             if (commit) {
               const commitInfo = {
                 author: commit.author?.login || 'unknown',
@@ -421,10 +425,10 @@
       const headers = runs.map((run, index) => {
         const th = document.createElement('th');
         th.className = 'px-3 py-3 font-semibold text-gray-700 cursor-pointer hover:bg-gray-50 transition-colors border-l border-gray-200';
-        
+
         const shortHash = run.githash ? run.githash.slice(0, 7) : 'unknown';
         const date = new Date(run.start);  // PostgreSQL timestamp is already in ISO format
-        
+
         // Create structured header content with full hash in tooltip
         th.innerHTML = `
           <div class="flex flex-col items-center gap-1.5 min-w-[100px]">
@@ -435,26 +439,26 @@
             <span class="text-[11px] font-medium text-gray-500" data-githash="${run.githash}">loading...</span>
             <span class="text-[10px] font-medium text-gray-400" data-branch="${run.githash}"></span>
             <div class="flex flex-col items-center">
-              <span class="text-xs font-medium text-gray-600">${date.toLocaleDateString(undefined, { 
-                month: 'short', 
+              <span class="text-xs font-medium text-gray-600">${date.toLocaleDateString(undefined, {
+                month: 'short',
                 day: 'numeric'
               })}</span>
-              <span class="text-[10px] text-gray-500">${date.toLocaleTimeString([], { 
-                hour: '2-digit', 
+              <span class="text-[10px] text-gray-500">${date.toLocaleTimeString([], {
+                hour: '2-digit',
                 minute: '2-digit',
                 hour12: false
               })}</span>
             </div>
           </div>
         `;
-        
+
         th.addEventListener('click', () => sortTable(index + 1));
         return th;
       });
 
       // Add all headers in order
       headers.forEach(th => theadRow.appendChild(th));
-      
+
       // Fetch all commit authors at once
       fetchCommitAuthors(runs.map(run => run.githash)).then(() => {
         // Update all author spans with cached values
@@ -485,7 +489,7 @@
           return outcome && outcome !== '';
         });
       });
-      
+
       nodesWithResults.sort().forEach(nodeid => {
         const tr = document.createElement('tr');
         tr.className = 'border-b hover:bg-gray-50';
@@ -500,15 +504,15 @@
           const td = document.createElement('td');
           td.className = 'px-4 py-3 text-center';
           const outcome = outcomeMap[`${nodeid}-${run.id}`];
-          
+
           if (!outcome || outcome === '') {
             td.textContent = "Not Run";
             td.className += ' ' + statusClasses['not_run'];
           } else {
-            td.textContent = outcome === 'passed' ? 'PASS' : 
-                            outcome === 'failed' ? 'FAIL' : 
-                            'SKIP';
-            td.className += ' ' + statusClasses[outcome.toLowerCase()];
+            // Format duration to 2 decimal places
+            const duration = outcome.duration !== undefined ? outcome.duration.toFixed(2) + 's' : '-';
+            td.textContent = duration;
+            td.className += ' ' + statusClasses[outcome.outcome.toLowerCase()];
           }
           tr.appendChild(td);
         });
@@ -523,7 +527,7 @@
         .replace(/test_examples_build\[(.*?)\]/, '$1')  // Extract name from new format
         .replace(/test_projects\[https?:\/\/[^\/]+\/[^\/]+\/([^\]]+)\]/g, '$1')  // More specific pattern
         .replace(/\[https?:\/\/[^\/]+\/[^\/]+\/([^\]]+)\]/g, '[$1]');  // Backup pattern
-      
+
       // Clean up any leftover brackets or dashes at the start
       return name.replace(/^[\[-]/, '');
     }
@@ -544,12 +548,12 @@
       box-shadow: 0 1px 2px rgba(0,0,0,0.05);
       background: linear-gradient(to bottom, #ffffff, #fafafa);
     }
-    
+
     /* Improve header cell appearance */
     th {
       transition: all 0.2s ease;
     }
-    
+
     th:hover {
       background: linear-gradient(to bottom, #f8fafc, #f1f5f9);
     }
