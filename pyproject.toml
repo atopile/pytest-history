@@ -1,5 +1,6 @@
 [project]
 name = "pytest-history"
+version = "0.2.0"
 description = "Pytest plugin to keep a history of your pytest runs"
 authors = [
     {name = "Matthew Wildoer", email = "matt@atopile.io"},
@@ -21,7 +22,6 @@ dependencies = [
     "supabase>=2.6.0",
     "typer>=0.15.1",
 ]
-dynamic = ["version"]
 
 [project.urls]
 repository = "https://github.com/atopile/pytest-history"
@@ -33,7 +33,7 @@ pytest-history = "pytest_history"
 pytest-history = "pytest_history.cli:main"
 
 [build-system]
-requires = ["hatchling>=1.8.0", "hatch-vcs"]
+requires = ["hatchling>=1.8.0"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
@@ -105,6 +105,3 @@ dev = [
 force-wrap-aliases = true
 combine-as-imports = true
 order-by-type = true
-
-[tool.hatch.version]
-source = "vcs"
