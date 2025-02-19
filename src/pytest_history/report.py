@@ -61,7 +61,7 @@ class SupabaseReporter:
             self.supabase.table("test_runs")
             .insert(
                 {
-                    "start": f"{datetime.now()}",
+                    "start": f"{datetime.now().astimezone()}",
                     "githash": _get_githash(),
                     "gitauthor": _get_git_author(),
                 }
