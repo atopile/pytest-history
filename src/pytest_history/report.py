@@ -28,6 +28,17 @@ def _get_githash() -> str | None:
         return None
 
 
+def _get_git_author() -> str | None:
+    try:
+        return (
+            subprocess.check_output(["git", "config", "user.name"])
+            .decode("utf-8")
+            .strip()
+        )
+    except subprocess.CalledProcessError:
+        return None
+
+
 class SupabaseReporter:
     def __init__(self, email: str, password: str, supabase_url: str, supabase_key: str):
         self.supabase: Client = create_client(
@@ -52,6 +63,7 @@ class SupabaseReporter:
                 {
                     "start": f"{datetime.now()}",
                     "githash": _get_githash(),
+                    "gitauthor": _get_git_author(),
                 }
             )
             .execute()

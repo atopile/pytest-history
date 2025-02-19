@@ -33,7 +33,7 @@ def flakes(db):
 
 
 def runs(db):
-    query = 'SELECT id, start, githash FROM "test.runs";'
+    query = 'SELECT id, start, githash, gitauthor FROM "test.runs";'
     with sqlite3.connect(db) as con:
         runs = con.execute(query)
         yield from (TestRun(*run) for run in runs)

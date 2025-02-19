@@ -22,3 +22,4 @@ class TestRun:
     id: int
     start: datetime.datetime
     githash: str
+    gitauthor: str | None
