@@ -31,7 +31,7 @@ def _get_githash() -> str | None:
 def _get_git_author() -> str | None:
     try:
         return (
-            subprocess.check_output(["git", "config", "user.name"])
+            subprocess.check_output(["git", "log", "-1", "--format=\"%an <%ae>\""])
             .decode("utf-8")
             .strip()
         )
