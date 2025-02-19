@@ -1,6 +1,6 @@
 [project]
 name = "pytest-history"
-version = "0.2.0"
+version = "0.3.0"
 description = "Pytest plugin to keep a history of your pytest runs"
 authors = [
     {name = "Matthew Wildoer", email = "matt@atopile.io"},
