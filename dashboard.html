@@ -174,7 +174,7 @@
       // 1. Fetch the most recent runs first
       let { data: allRuns, error: runsError } = await supabase
         .from('test_runs')
-        .select('id, start, githash')
+        .select('id, start, githash, gitauthor')
         .order('id', { ascending: false })
         .limit(FETCH_LIMIT);
       if (runsError) {
@@ -334,89 +334,8 @@
       buildTableRows('#fabll-table', fabllNodes, validFabllRuns, outcomeMap);
       buildTableRows('#projects-table', projectNodes, validProjectRuns, outcomeMap);
 
-      // Fetch commit info for all runs
-      await fetchCommitAuthors(allRuns.map(run => run.githash));
-
-      // Filter runs to only include those on main
-      allRuns = allRuns.filter(run => {
-        if (!run.githash) return false;
-        const commitInfo = sessionStorage.getItem(`commit-${run.githash}`);
-        return commitInfo !== null;  // If we have commit info, it's on main
-      });
-    }
-
-    // Add GitHub API function
-    async function fetchCommitAuthors(commits) {
-      // Get main branch's history first
-      try {
-        const mainResponse = await fetch(
-          'https://api.github.com/repos/atopile/atopile/commits?sha=main&per_page=100', {
-          headers: {
-            'Accept': 'application/vnd.github.v3+json'
-          }
-        });
-
-        if (!mainResponse.ok) {
-          console.error('Failed to fetch main branch history');
-          return;
-        }
-
-        const mainHistory = await mainResponse.json();
-        const mainCommits = new Set(mainHistory.map(commit => commit.sha));
-
-        if (DEBUG) {
-          console.log('Found commits on main:', mainCommits);
-        }
-
-        // Filter commits to only those in main's history
-        commits = commits.filter(hash => hash && mainCommits.has(hash));
-      } catch (error) {
-        console.error('Error fetching main branch history:', error);
-        return;
-      }
-
-      // Filter out commits we already have cached
-      const uncachedCommits = commits.filter(hash => {
-        if (!hash) return false;
-        return !sessionStorage.getItem(`commit-${hash}`);
-      });
-
-      // If all commits are cached, return early
-      if (uncachedCommits.length === 0) return;
-
-      try {
-        if (DEBUG) {
-          console.log('Fetching commit authors for:', uncachedCommits);
-        }
-
-        // Get commit info for each commit
-        for (const hash of uncachedCommits) {
-          const response = await fetch(
-            `https://api.github.com/repos/atopile/atopile/commits/${hash}`,
-            {
-              headers: {
-                'Accept': 'application/vnd.github.v3+json'
-              }
-            }
-          );
-
-          if (response.ok) {
-            const commit = await response.json();
-
-            if (commit) {
-              const commitInfo = {
-                author: commit.author?.login || 'unknown',
-                branch: 'main'  // We know it's on main since we filtered
-              };
-              sessionStorage.setItem(`commit-${commit.sha}`, JSON.stringify(commitInfo));
-            }
-          } else if (response.status === 403) {
-            console.warn('GitHub API rate limit exceeded');
-          }
-        }
-      } catch (error) {
-        console.error('Error fetching commit authors:', error);
-      }
+      // Filter runs to only include those with a githash
+      allRuns = allRuns.filter(run => run.githash !== null);
     }
 
     function buildTableHeaders(tableId, runs) {
@@ -436,8 +355,8 @@
               <span class="text-[10px] text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded">#${run.id}</span>
               <span class="font-mono text-xs font-medium text-gray-600 bg-gray-100 px-1.5 py-0.5 rounded" title="${run.githash || 'No hash'}">${shortHash}</span>
             </div>
-            <span class="text-[11px] font-medium text-gray-500" data-githash="${run.githash}">loading...</span>
             <span class="text-[10px] font-medium text-gray-400" data-branch="${run.githash}"></span>
+            <span class="text-[10px] font-medium text-gray-400" data-branch="${run.author}"></span>
             <div class="flex flex-col items-center">
               <span class="text-xs font-medium text-gray-600">${date.toLocaleDateString(undefined, {
                 month: 'short',
@@ -458,21 +377,6 @@
 
       // Add all headers in order
       headers.forEach(th => theadRow.appendChild(th));
-
-      // Fetch all commit authors at once
-      fetchCommitAuthors(runs.map(run => run.githash)).then(() => {
-        // Update all author spans with cached values
-        headers.forEach((th, index) => {
-          const githash = runs[index].githash;
-          const authorSpan = th.querySelector(`[data-githash="${githash}"]`);
-          const branchSpan = th.querySelector(`[data-branch="${githash}"]`);
-          if (authorSpan && branchSpan) {
-            const commitInfo = JSON.parse(sessionStorage.getItem(`commit-${githash}`) || '{"author":"unknown","branch":"main"}');
-            authorSpan.textContent = `@${commitInfo.author}`;
-            branchSpan.textContent = commitInfo.branch;
-          }
-        });
-      });
 
       // Add click handler to the Test Node column header
       const firstTh = theadRow.querySelector('th');
